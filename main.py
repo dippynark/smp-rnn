@@ -51,15 +51,15 @@ def load_stock_data(input_size, num_steps, k=None, target_symbol=None, test_rati
     info = pd.read_csv("data/companylist.csv")
     info = info.rename(columns={col: col.lower().replace(' ', '_') for col in info.columns})
     info['file_exists'] = info['symbol'].map(lambda x: os.path.exists("data/{}.csv".format(x)))
-    print info['file_exists'].value_counts().to_dict()
+    print(info['file_exists'].value_counts().to_dict())
 
     info = info[info['file_exists'] == True].reset_index(drop=True)
-    info = info.sort('marketcap', ascending=False).reset_index(drop=True)
+    info = info.sort_values('marketcap', ascending=False).reset_index(drop=True)
 
     if k is not None:
         info = info.head(k)
 
-    print "Stocks info:\n", info.head()
+    print("Stocks info:\n", info.head())
 
     # Generate embedding meta file
     info[['symbol', 'sector']].to_csv(os.path.join("logs/metadata.tsv"), sep='\t', index=False)

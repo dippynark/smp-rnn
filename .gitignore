@@ -3,3 +3,4 @@ secrets
 /data
 /images
 /logs
+__pycache__
