@@ -1,12 +1,16 @@
 import os
 import pandas as pd
 import pprint
+import sys
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
+from fairing import TrainJob
+from fairing.backends import KubeflowBackend
+
 from data_model import StockDataSet
-from model_rnn import LstmRNN
+import model_rnn
 
 flags = tf.app.flags
 flags.DEFINE_integer("stock_count", 100, "Stock count [100]")
@@ -31,7 +35,6 @@ pp = pprint.PrettyPrinter()
 
 if not os.path.exists("logs"):
     os.mkdir("logs")
-
 
 def show_all_variables():
     model_vars = tf.trainable_variables()
@@ -71,38 +74,48 @@ def load_stock_data(input_size, num_steps, k=None, target_symbol=None, test_rati
                      test_ratio=0.05)
         for _, row in info.iterrows()]
 
+PY_VERSION = ".".join([str(x) for x in sys.version_info[0:3]])
+BASE_IMAGE = 'python:{}'.format(PY_VERSION)
+DOCKER_REGISTRY = 'dippynark'
+
 def main(_):
     pp.pprint(flags.FLAGS.__flags)
 
-    # gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
-    run_config = tf.ConfigProto()
-    run_config.gpu_options.allow_growth = True
+    #show_all_variables()
 
-    with tf.Session(config=run_config) as sess:
-        rnn_model = LstmRNN(
-            sess,
-            FLAGS.stock_count,
-            lstm_size=FLAGS.lstm_size,
-            num_layers=FLAGS.num_layers,
-            num_steps=FLAGS.num_steps,
-            input_size=FLAGS.input_size,
-            embed_size=FLAGS.embed_size,
+    stock_data_list = load_stock_data(
+        FLAGS.input_size,
+        FLAGS.num_steps,
+        k=FLAGS.stock_count,
+        target_symbol=FLAGS.stock_symbol,
+    )
+
+    print(tf.app.flags.FLAGS.flag_values_dict())
+
+    rnn_model = model_rnn.make_rnn_model(FLAGS.stock_count,
+        stock_data_list,
+        FLAGS.batch_size,
+        FLAGS.sample_size,
+        FLAGS.max_epoch,
+        FLAGS.init_learning_rate,
+        FLAGS.learning_rate_decay,
+        FLAGS.init_epoch,
+        FLAGS.keep_prob,
+        lstm_size=FLAGS.lstm_size,
+        num_layers=FLAGS.num_layers,
+        num_steps=FLAGS.num_steps,
+        input_size=FLAGS.input_size,
+        embed_size=FLAGS.embed_size,
         )
 
-        show_all_variables()
+    train_job = TrainJob(rnn_model, BASE_IMAGE, input_files=["data_model.py", "requirements.txt", "logs/metadata.tsv"], docker_registry=DOCKER_REGISTRY, backend=KubeflowBackend())
+    train_job.submit()
 
-        stock_data_list = load_stock_data(
-            FLAGS.input_size,
-            FLAGS.num_steps,
-            k=FLAGS.stock_count,
-            target_symbol=FLAGS.stock_symbol,
-        )
-
-        if FLAGS.train:
-            rnn_model.train(stock_data_list, FLAGS)
-        else:
-            if not rnn_model.load()[0]:
-                raise Exception("[!] Train a model first, then run test mode")
+    #if FLAGS.train:
+    #    rnn_model().train(stock_data_list, FLAGS)
+    #else:
+    #    if not rnn_model.load()[0]:
+    #        raise Exception("[!] Train a model first, then run test mode")
 
 if __name__ == '__main__':
     tf.app.run()
