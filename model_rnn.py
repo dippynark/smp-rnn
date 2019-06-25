@@ -7,6 +7,7 @@ import random
 import re
 import shutil
 import time
+import tarfile
 import tensorflow as tf
 
 import matplotlib
@@ -15,8 +16,11 @@ import matplotlib.pyplot as plt
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
+from minio import Minio
+from minio.error import (ResponseError, BucketAlreadyOwnedByYou, BucketAlreadyExists)
+
 def make_rnn_model(stock_count, dataset_list, batch_size, sample_size, max_epoch, init_learning_rate, learning_rate_decay, init_epoch, keep_prob,
-    lstm_size=128, num_layers=1, num_steps=30, input_size=1, embed_size=None, logs_dir="logs", plots_dir="images"):
+    lstm_size=128, num_layers=1, num_steps=30, input_size=1, embed_size=None, logs_dir="logs", plots_dir="images", access_key=None, secret_key=None):
     class LstmRNN(object):
         def __init__(self, stock_count=stock_count,
                     dataset_list=dataset_list,
@@ -49,6 +53,21 @@ def make_rnn_model(stock_count, dataset_list, batch_size, sample_size, max_epoch
                 embed_size (int): length of embedding vector, only used when stock_count > 1.
                 checkpoint_dir (str)
             """
+
+            self.client = Minio('minio-service:9000',
+                  access_key=access_key,
+                  secret_key=secret_key,
+                  secure=False)
+            self.bucket_name = 'smp-rnn'
+
+            try:
+                self.client.make_bucket(self.bucket_name)
+            except BucketAlreadyOwnedByYou as err:
+                pass
+            except BucketAlreadyExists as err:
+                pass
+            except ResponseError as err:
+                raise
             
             # gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
             run_config = tf.ConfigProto()
@@ -276,6 +295,8 @@ def make_rnn_model(stock_count, dataset_list, batch_size, sample_size, max_epoch
             # Save the final model
             self.save(global_step)
 
+            self.upload()
+
         @property
         def model_name(self):
             name = "stock_rnn_lstm%d_step%d_input%d" % (
@@ -302,11 +323,33 @@ def make_rnn_model(stock_count, dataset_list, batch_size, sample_size, max_epoch
 
         def save(self, step):
             model_name = self.model_name + ".model"
+            save_path = os.path.join(self.model_logs_dir, model_name)
             self.saver.save(
                 self.sess,
-                os.path.join(self.model_logs_dir, model_name),
+                save_path,
                 global_step=step
             )
+
+        def upload(self):
+            archive_files = []
+            cwd = os.getcwd()
+            for (dirpath, dirnames, files) in os.walk(self.model_logs_dir):
+                for file_name in files:
+                    rel_dir = os.path.relpath(dirpath, cwd)
+                    rel_file = os.path.join(rel_dir, file_name)
+                    archive_files.append(rel_file)
+                break
+
+            archive = "%s.tar.gz" % self.model_name
+            with tarfile.open(archive, "w:gz") as tar:
+                for file_name in archive_files:
+                    tar.add(file_name)
+
+            try:
+                self.client.fput_object(self.bucket_name, archive, archive)
+            except ResponseError as err:
+                print(err)
+                raise
 
         def load(self):
             print(" [*] Reading checkpoints...")

@@ -29,6 +29,9 @@ flags.DEFINE_string("stock_symbol", None, "Target stock symbol [None]")
 flags.DEFINE_integer("sample_size", 4, "Number of stocks to plot during training. [4]")
 flags.DEFINE_boolean("train", False, "True for training, False for testing [False]")
 
+flags.DEFINE_string("access_key", None, "S3 access key")
+flags.DEFINE_string("secret_key", None, "S3 secret key")
+
 FLAGS = flags.FLAGS
 
 pp = pprint.PrettyPrinter()
@@ -106,6 +109,8 @@ def main(_):
         num_steps=FLAGS.num_steps,
         input_size=FLAGS.input_size,
         embed_size=FLAGS.embed_size,
+        access_key=FLAGS.access_key,
+        secret_key=FLAGS.secret_key,
         )
 
     train_job = TrainJob(rnn_model, BASE_IMAGE, input_files=["data_model.py", "requirements.txt", "logs/metadata.tsv"], docker_registry=DOCKER_REGISTRY, backend=KubeflowBackend())

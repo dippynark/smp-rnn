@@ -43,6 +43,7 @@ kubernetes==9.0.0
 Markdown==3.1.1
 MarkupSafe==1.1.1
 matplotlib==3.1.0
+minio==4.0.18
 mistune==0.8.4
 mock==3.0.5
 nbconvert==5.5.0

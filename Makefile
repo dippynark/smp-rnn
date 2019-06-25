@@ -1,12 +1,16 @@
 DATA_DIR := data
 MAX_EPOCH := 1
 
+MINIO_ACCESS_KEY := minio
+MINIO_SECRET_KEY := $(shell cat secrets/minio-secret.key)
+MINIO_PID_FILE := .minio.pid
+
 ALPHA_VANTAGE_URL := https://www.alphavantage.co
 ALPHA_VANTAGE_API_KEY := $(shell cat secrets/alpha-vantage.key)
 ALPHA_VANTAGE_STOCK_COUNT := 10
 
 run: data
-	python main.py --stock_count=$(ALPHA_VANTAGE_STOCK_COUNT) --train --input_size=1 --lstm_size=128 --max_epoch=$(MAX_EPOCH) --embed_size=8
+	python main.py --stock_count=$(ALPHA_VANTAGE_STOCK_COUNT) --train --input_size=1 --lstm_size=128 --max_epoch=$(MAX_EPOCH) --embed_size=8 --access_key $(MINIO_ACCESS_KEY) --secret_key $(MINIO_SECRET_KEY)
 
 #.PHONY: data
 data:
