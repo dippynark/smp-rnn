@@ -31,12 +31,8 @@ class StockDataSet(object):
         else:
             self.raw_seq = [price for tup in raw_df[['open', 'close']].values for price in tup]
 
-        self.raw_seq = np.array(self.raw_seq)
+        self.raw_seq = np.array(self.raw_seq, dtype=np.float32)
         self.train_X, self.train_y, self.test_X, self.test_y = self._prepare_data(self.raw_seq)
-
-    def info(self):
-        return "StockDataSet [%s] train: %d test: %d" % (
-            self.stock_sym, len(self.train_X), len(self.test_y))
 
     def _prepare_data(self, seq):
         # split into items of input_size
@@ -54,17 +50,21 @@ class StockDataSet(object):
         train_size = int(len(X) * (1.0 - self.test_ratio))
         train_X, test_X = X[:train_size], X[train_size:]
         train_y, test_y = y[:train_size], y[train_size:]
-        return train_X, train_y, test_X, test_y
 
-    def generate_one_epoch(self, batch_size):
-        num_batches = int(len(self.train_X)) // batch_size
-        if batch_size * num_batches < len(self.train_X):
-            num_batches += 1
+        def default_X(data):
+            if len(data) == 0:
+                return np.empty(shape=(0, self.num_steps, self.input_size))
+            return data
 
-        batch_indices = list(range(num_batches))
-        random.shuffle(batch_indices)
-        for j in batch_indices:
-            batch_X = self.train_X[j * batch_size: (j + 1) * batch_size]
-            batch_y = self.train_y[j * batch_size: (j + 1) * batch_size]
-            assert set(map(len, batch_X)) == {self.num_steps}
-            yield batch_X, batch_y
+        def default_y(data):
+            if len(data) == 0:
+                return np.empty(shape=(0, self.input_size))
+            return data
+
+        return default_X(train_X), default_y(train_y), default_X(test_X), default_y(test_y)
+
+    def train_data(self):
+        return self.train_X, self.train_y
+
+    def test_data(self):
+        return self.test_X, self.test_y

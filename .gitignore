@@ -4,3 +4,6 @@ secrets
 /images
 /logs
 __pycache__
+/models
+/backup
+*.pyc
