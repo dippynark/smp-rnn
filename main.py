@@ -219,8 +219,12 @@ class FairingModel(object):
             os.makedirs(model_dir)
         return model_dir
 
-PY_VERSION = "".join([str(x) for x in sys.version_info[0:2]])
-BASE_IMAGE = 'seldonio/seldon-core-s2i-python{}:0.10'.format(PY_VERSION)
+PY_VERSION = ".".join([str(x) for x in sys.version_info[0:3]])
+TRAIN_BASE_IMAGE = 'python:{}'.format(PY_VERSION)
+
+SELDON_CORE_PY_VERSION = "".join([str(x) for x in sys.version_info[0:2]])
+PREDICT_BASE_IMAGE = 'seldonio/seldon-core-s2i-python{}:0.10'.format(PY_VERSION)
+
 DOCKER_REGISTRY = 'dippynark'
 
 def main(_):
@@ -229,13 +233,18 @@ def main(_):
         if LOCAL:
             FairingModel().train()
         else:
-            train_job = TrainJob(FairingModel, BASE_IMAGE, input_files=["data_model.py", "requirements.txt"] + glob.glob('data/*'), docker_registry=DOCKER_REGISTRY, backend=KubeflowBackend())
+            train_job = TrainJob(FairingModel,
+                TRAIN_BASE_IMAGE,
+                input_files=["data_model.py", "requirements.txt"] + glob.glob('data/*'),
+                docker_registry=DOCKER_REGISTRY,
+                backend=KubeflowBackend())
             train_job.submit()
     else:
         if LOCAL:
             pass
         else:
-            endpoint = PredictionEndpoint(FairingModel, BASE_IMAGE,
+            endpoint = PredictionEndpoint(FairingModel,
+                PREDICT_BASE_IMAGE,
                 input_files=["data_model.py", "requirements.txt"],
                 docker_registry=DOCKER_REGISTRY,
                 backend=KubeflowBackend())
