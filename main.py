@@ -29,7 +29,9 @@ flags.DEFINE_float("drop_prob", 0.2, "Drop probability of dropout layer. [0.2]")
 flags.DEFINE_integer("num_train_steps", 1000, "Number of training steps. [1000]")
 flags.DEFINE_float("test_ratio", 0.05, "Proportion of data to use for testing. [0.05]")
 flags.DEFINE_string("model_dir_prefix", "models", "Directory to store model checkpoints and event files. [models]")
+
 flags.DEFINE_boolean("training", True, "Whether to train or predict. [True]")
+flags.DEFINE_boolean("local", True, "Whether to run locally [True]")
 
 flags.DEFINE_string("endpoint", "minio-service:9000", "S3 endpoint [minio-service:9000]")
 flags.DEFINE_string("access_key", None, "S3 access key")
@@ -49,7 +51,9 @@ DROP_PROB = FLAGS.drop_prob
 NUM_TRAIN_STEPS = FLAGS.num_train_steps
 TEST_RATIO = FLAGS.test_ratio
 MODEL_DIR_PREFIX = FLAGS.model_dir_prefix
+
 TRAINING = FLAGS.training
+LOCAL = FLAGS.local
 
 ENDPOINT = FLAGS.endpoint
 ACCESS_KEY = FLAGS.access_key
@@ -58,12 +62,6 @@ SECRET_KEY = FLAGS.secret_key
 class FairingModel(object):
 
     def __init__(self):
-
-        self.client = Minio(ENDPOINT,
-            access_key=ACCESS_KEY,
-            secret_key=SECRET_KEY,
-            secure=False)
-        self.bucket_name = 'smp-rnn'
 
         self.stock_count = STOCK_COUNT
         self.input_size = INPUT_SIZE
@@ -75,7 +73,16 @@ class FairingModel(object):
         self.num_train_steps = NUM_TRAIN_STEPS
         self.test_ratio = TEST_RATIO
         self.model_dir_prefix = MODEL_DIR_PREFIX
+
         self.training = TRAINING
+        self.local = LOCAL
+
+        if not self.local:
+            self.client = Minio(ENDPOINT,
+                access_key=ACCESS_KEY,
+                secret_key=SECRET_KEY,
+                secure=False)
+            self.bucket_name = 'smp-rnn'
 
         inputs = layers.Input(shape=(self.num_steps,self.input_size))
         x = inputs
@@ -134,15 +141,15 @@ class FairingModel(object):
 
         self.estimator.train(input_fn=lambda:self.train_input_fn(self.features, self.labels, self.batch_size), steps=self.num_train_steps)
 
-        self.upload()
+        self.save()
 
     def predict_input_fn(self, features):
         dataset = tf.data.Dataset.from_tensor_slices((dict(features),))
         return dataset
 
     def predict(self, X, feature_names):
-        print(X)
-        self.download()
+
+        self.restore()
 
         self.features = {"input_1": X}
         return str(list(self.estimator.predict(input_fn=lambda:self.predict_input_fn(self.features))))
@@ -152,7 +159,11 @@ class FairingModel(object):
 
         #return "{\"key\": \"value\"}"
 
-    def upload(self):    
+    def save(self):
+
+        if self.local:
+            return
+
         try:
             self.client.make_bucket(self.bucket_name)
         except BucketAlreadyOwnedByYou as err:
@@ -182,7 +193,7 @@ class FairingModel(object):
             print(err)
             raise
 
-    def download(self):
+    def restore(self):
         archive = "%s.tar.gz" % self.model_name
 
         try:
@@ -215,14 +226,20 @@ DOCKER_REGISTRY = 'dippynark'
 def main(_):
 
     if TRAINING:
-        train_job = TrainJob(FairingModel, BASE_IMAGE, input_files=["data_model.py", "requirements.txt"] + glob.glob('data/*'), docker_registry=DOCKER_REGISTRY, backend=KubeflowBackend())
-        train_job.submit()
+        if LOCAL:
+            FairingModel().train()
+        else:
+            train_job = TrainJob(FairingModel, BASE_IMAGE, input_files=["data_model.py", "requirements.txt"] + glob.glob('data/*'), docker_registry=DOCKER_REGISTRY, backend=KubeflowBackend())
+            train_job.submit()
     else:
-        endpoint = PredictionEndpoint(FairingModel, BASE_IMAGE,
-            input_files=["data_model.py", "requirements.txt"],
-            docker_registry=DOCKER_REGISTRY,
-            backend=KubeflowBackend())
-        endpoint.create()
+        if LOCAL:
+            pass
+        else:
+            endpoint = PredictionEndpoint(FairingModel, BASE_IMAGE,
+                input_files=["data_model.py", "requirements.txt"],
+                docker_registry=DOCKER_REGISTRY,
+                backend=KubeflowBackend())
+            endpoint.create()
 
 if __name__ == '__main__':
     tf.app.run()
