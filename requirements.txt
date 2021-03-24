@@ -69,7 +69,7 @@ PyYAML==5.1.1
 pyzmq==18.0.2
 requests==2.22.0
 requests-oauthlib==1.2.0
-rsa==4.0
+rsa==4.1
 Send2Trash==1.5.0
 six==1.12.0
 tensorboard==1.14.0
